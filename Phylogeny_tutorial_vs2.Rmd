@@ -1,0 +1,961 @@
+---
+title: "Phylogeny Tutorial"
+author: "Nina Dombrowski & Anja Spang"
+affiliation: "NIOZ"
+date: "`r Sys.Date()`"
+knit: (function(input_file, encoding) {out_dir <- 'docs';rmarkdown::render(input_file,encoding=encoding, output_file=file.path(dirname(input_file), out_dir, 'Phylogeny_tutorial'))})
+output:
+  rmdformats::readthedown:
+    highlight: kate
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+self_contained: yes
+---
+
+
+```{r knitr setup, include=FALSE,  eval=TRUE, echo=FALSE, warning=FALSE}
+library(knitr)
+library(kableExtra)
+
+knitr::opts_chunk$set(eval=TRUE, cache=FALSE, message=FALSE, warning=FALSE, 
+                      comment = "", results="markup")
+#https://bookdown.org/yihui/rmarkdown/html-document.html
+#install.packages('knitr', ependencies = TRUE)
+#install.packages("devtools", lib="~/R/lib")
+#library(DT)
+#devtools::session_info()
+```
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+```
+
+
+###################################################################################
+###################################################################################
+# 0. General introduction
+###################################################################################
+###################################################################################
+
+This tutorial is the written-up version of a lecture given by Dr. Anja Spang and Dr. Nina Dombrowski as part of a bioinformatics workshop given for graduate students at the Royal Netherlands Institute for Sea Research (NIOZ) in the Netherlands.
+
+The goal of this tutorial is for you to learn how to run a phylogeny analysis using single as well as concatenated marker genes. 
+
+During this tutorial we will work three proteins that are found in ~40 archaeal genomes (all belonging to the same phylum) and we want to make individual phylogenetic trees for each of the three single proteins as well as for a concatenation of those proteins. 
+
+This notebook will consist of two parts:
+
+1. A theoretical part discussing  various aspects important for phylogenetic analyses
+2. A practical part in which we describe how to generate phylogenetic trees
+
+
+The tutorial was setup to work on the NIOZ servers, where all of the required tools are already installed. The exception are custom scripts, which will be provided as part of this tutorial. If you work on a different system you need to set up programs, such as mafft, yourself and change file paths if needed.
+
+
+###################################################################################
+###################################################################################
+# 1. Theory
+###################################################################################
+###################################################################################
+
+
+## What is a phylogenetic tree and how do we read it?
+
+A phylogenetic tree is:
+
+```{r fig1, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_1.png")
+```
+
+Definitions:
+
+- tip: The sequences we collected and want to use for our phylogeny
+- node: common ancestors of the taxa found at the tips above the node
+- branch length: amount of character change or genetic change. The longer the branch, the more changes have accumulated
+- scale bar: usually figures with phylogenetic trees should all come with a scale bar,which shows the substitutions across sites
+- root: the most recent common ancestor of all sequences in the phylogeny
+- outgroup : a taxon outside of the group of interest, often used to root your tree. Ideally, this should be  general the most closely related sequence(s) outside the group of interest.
+
+Sometimes trees are also represented as a cladogram in which branch lengths **do not** correspond to the amount of character change. Below we see a phylogram next to a cladogram. In cladograms branches are either equal in length or, as in the example below, all branches end flush. If you are unsure if you are dealing with a cladogram, it might be useful to check if there is a scale bar on the diagram. If there isn't, it is probably a cladogram.
+
+```{r fig2, echo=FALSE, fig.cap="", out.width = '80%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_2b.png")
+```
+
+
+## Some basic terminology
+
+**1. Monophyly**
+
+```{r fig3, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_3.png")
+```
+
+The yellow dots depict synapomoprhies:
+
+--> shared derived characters that are present in all members of a phylogenetic group and its ancestor.
+
+**2. Polyphyly**
+
+```{r fig4, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_4.png")
+```
+
+
+**3. Paraphyly**
+
+A group is paraphyletic if it consists of the group's last common ancestor and all descendants of that ancestor excluding a few—typically only one or two—monophyletic subgroups.
+
+```{r fig5, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_5.png")
+```
+
+
+**4. Divergent versus convergent evolution**
+
+- Divergent evolution: Divergent evolution or divergent selection is the accumulation of differences between closely related populations within a species, leading to speciation. Divergent evolution may occur as a response to changes in abiotic factors, such as a change in environmental conditions, or when a new niche becomes available.
+- Convergent evolution: Organisms not closely related (not monophyletic), independently evolve similar traits as a result of having to adapt to similar environments or ecological niches. Convergent evolution occurs when descendants resemble each other more than their ancestors did with respect to some feature. 
+
+```{r fig6, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_6.png")
+```
+
+
+
+**5. Rooted versus unrooted trees**
+
+A rooted tree is a tree in which one of the nodes is defined as the root, and thus the direction of evolutionary change is determined. In contrast, an unrooted tree has no pre-determined root and therefore shows no hierarchy, i.e. the directionality of evolution is unknown. Rooting an unrooted tree involves inserting a new node, which will function as the root node. 
+
+The most widely known way to root is **outgroup rooting**. In this case, we need to use external knowledge (or make a hopefully reasonable assumption) to identify at least one taxon known to have diverged earlier then the group of interest. Howeverk the outgroup should not be too distant to establish character homology.
+
+An alternative way to root is **midpoint rooting**. In this case, the longest distance between two tips on the tree is identified and the root is placed precisely in the middle of that distance. The assumption behind midpoint rooting is that character changes across the phylogenetic tree are approximately clock-like, i.e they happen approximately at the same speed in every lineage. Unfortunately, this is rarely the case and evolution is in general far from clock-like (e.g. different rates of evolution in different species, different selection pressure on different sites in a proteins etc). Whenever, the assumption of the clock is violated, midpoint rooting will be misleading.
+
+```{r fig7, echo=FALSE, fig.cap="", out.width = '80%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_7.png")
+```
+
+
+## How do we select marker genes?
+
+Before we can construct a phylogenetic tree, we need to find genes with a shared ancestry, i.e. genes need to be **homologous**, i.e. have a shared ancestry. 
+
+Homologous sequences can be further distinguised into orthologs and paralogs:
+
+- Orthologs are genes that in different species evolved from a common ancestral gene (see illustration)
+- Paralogs are gene copies created by a duplication event within the same genome. 
+- sometimes, paralogous genes evolve different functions due to decreased selective pressure on the copy of the duplicated gene.
+
+```{r fig8, echo=FALSE, fig.cap="", out.width = '80%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_8.png")
+```
+
+
+Selecting a good marker depends on the scientific question? Do we want to:
+
+- Approximate a species tree? Then we can use ribosomal RNA (i.e. the 16S rRNA gene) or universal, conserved and single-copy marker genes or proteins.
+- study the evolution of enzyme families? Then we can look at genes or protein sequences belonging to a specific family, such as the ATP synthase and include all homologs.
+- use markers for concatenations? Then its important that the individual markers have the same underlying topology/evolutionary history and that the correct orthologs have been identified (see illustration above).
+
+One important thing to remember is that a RNA/gene or protein does not necessarily equal the species tree. For example, differences between the two can be due to horizontal gene transfers, imcomplete lineage sorting, gene duplications or gene losses.
+
+## Alignments
+
+Before phylogenetic analyses can be performed, sequences have to be aligned such that each column of the alignment contains those character states that have evolved from the same ancestral state. There are several algorithms to do this:
+
+- **Progressive alignments**: Here, the algorithm first calculates pairwaise distances between all sequences. Then a guide tree is computed, usually using neighbour joining methods. Afterwards, the algorithm builds a progressive alignment using the branching order of the tree. This means that two species that are closest in the tree are aligned first. Then the sequences are treated as one pair of sequences (fixing gaps) and aligned to the next closest sequence. This is repeated until all sequences are aligned. Programs that use this approach are ClustalW and ClustalX.
+
+```{r fig9, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_9.png")
+```
+
+The benefit of this approach is that it is fast and can be used for a large number of sequences. However, if erors are introduced early during the progressive alignment (e.g.  misalignments, introduction of erroneous gaps etc), these will remain. Especially, if errors are introduced during the first steps, they will be carried throughout the whole alignment.
+
+Below we see an example of errors in the alignment, i.e. the sequences in the black box look very messy. There is the option to manually clean the alignment to remove these issues.
+
+```{r fig10, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_10.png")
+```
+
+However, since manual cleaning takes a lot of work and is often not reproducible, it is recommended to first of all use better alignment tools, which decrease the amount of erroneously aligned sites.
+
+
+- **Iterative alignments**: This approach gradually optimizes alignments. In contrast to progressive alignments, these alignments are based on a progressive alignment combined with a scoring system and refinement steps. These algorithms work similarly to progressive methods but repeatedly realign the initial sequences as well as adding new sequences to the growing MSA. Due to the refinement steps this approach is slower but much more accurate. Programs that use this approach are mafft and muscle.
+
+Personal recommendation: If you have less than 1000 sequences use mafft_linsi if you have more use mafft. 
+
+## Trimming and visualizing alignments
+
+As we have mentioned above, alignments are not perfect. They can have gappy regions, e.g. certain regions may be poorly conserved and therefore challenging to align accurately (i.e. this is especially visuable if for the ends of the sequences).
+
+To reduce the amount of erronously aligned sites and gappy regions, it is recommended to implement a trimming step, which removes noisy regions.
+
+Commonly used trimming tools, that remove certain columns from the alignment based on specific parameters of interest are:
+
+- TrimAL
+- BMGE
+
+Due to the issues with alignments it is always recommended to visually inspect your alignment both before and after trimming using tools such as:
+
+- seaview
+- jalview
+- ...
+
+
+## Reconstructing trees
+
+There are many different algorithms to construct a phylogenetic tree:
+
+```{r fig11, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_11.png")
+```
+
+### Neighbour joining approaches: 
+
+- Constructs a tree by sequentially finding pairs of the nearest neighbours (with shortest pariwise distances) based on a distance matrix. It corrects for multiple substitutions, i.e. mutational saturation.
+- Use a clustering algorithm for tree reconstruction and  optimizes length of internal branches
+- are very fast but therefore have several disadvantages: e.g. instead of taking into account all character states of a sequence, these approaches only considers distance information (loss of valuable information). Furthermore, this approach does not implement an optimality criterion.
+
+
+Due to the disadvantages, neighbour joining approaches are mainly used to generate quick guide tree, which serves as input for alternative treeing methods such as maximum likelihood or Bayesian. These latter methods subsequently improve the initial guide tree (see below).
+
+### Maximum parsimony (MP) approaches
+
+- Choose the simplest explanation that fits the evidence
+- are very sensitive to long branch attrachtion
+- can not correct for multiple substitutions --> underestimates true divergence
+- Can be used for small datasets, when we have slow rates of evolution or look at closely related sequences.
+
+**Long-branch attraction** (LBA) is the erroneous grouping of highly divergent sequences as sisters. This grouping is usually based on the parallel accumulation of a large amount of substitutions. I.e. convergent changes along branches are misinterpreted as being similar due to common decent. While LBA often occurs in parsimony based methods, it is a common problem in most phylogenetic reconstructions and also occurs in methods implementing models of evolution, especially if these are too simple and do not well describe the evolutionary processes that have shaped the sequences being analysed.
+
+```{r fig12, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_12.png")
+```
+
+### Maximun likelihood (ML) approaches
+
+- ML algorithms search for the tree that maximises the probability of observing character stats (i.e. the aligned positions) given a tree topology and a model of evolution
+- involve numerical optimisation techniques that find the combination of branch length and evolutionary parameters that maximise the likelihood.
+- This approach is computationally demanding and the resources needed dependent on the chosen model of evolution. 
+
+Commonly used tools:
+
+- FastTree: very fast, suitable for a first guide tree or trees for very large datasets, rough approximation
+- RaxML: slower, possible to use more complex models of evolution
+- IQ-tree: slower, possible to use more complex models of evolution, extremely well documented and constantly updated
+
+### Bayesian approaches
+
+- Character-state methods that use an optimally criterion
+- In contrast to MP and ML, Bayesian does not try to find the best tree.
+- Instead, Bayesian approaches search for a set of plausible trees given the data. In turn, the posterior distribution holds a confidence estimate of any evol. relationship
+- need to specifiy a prior believe, i.e. prior distrbution on model parameters, branch length and tree topology.
+- This approach is very slow and recommended for smaller datasets.
+
+Commonly used tools:
+
+- MrBayes
+- PhyloBayes
+
+
+## Models of sequence evolution
+
+### For DNA
+
+**Substitution model**, or models of sequence evolution, are models that describe changes over evolutionary time.
+
+There are many substitution models. I.e. the simplistic Jukes Cantor model
+
+```{r fig13, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_13.png")
+```
+
+The Jukes Cantor model often is too simple, and other models account for different base/amino acid frequences, such as the Felsenstein model.
+
+These frequences are plotted in a **substitution matrix** : A two dimensional matrix with scores describing the probability of one amino acid (or nucleotide) being replaced by another.
+
+
+```{r fig14, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_14.png")
+```
+
+We can also take into account that there are different frequencies of transversions versus transitions, such as in the Kimura 2 parameter model.
+
+```{r fig15, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_15.png")
+```
+
+The general time reversible model (GTR) is the most general neutral, independent, finite-site, time-reversible model possible and is generally well suited for phylogenetic reconstructions based on DNA/RNA sequences. 
+
+```{r fig16, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_16.png")
+```
+
+
+
+### For proteins
+
+For proteins many substitution models exist, i.e. in IQ-tree we can use these: http://www.iqtree.org/doc/Substitution-Models
+
+```{r fig17, echo=FALSE, fig.cap="", out.width = '60%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_17.png")
+```
+
+And there are further parameters that we can use specify different kinds of base frequencies with these settings:
+
+```{r fig18, echo=FALSE, fig.cap="", out.width = '40%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_18.png")
+```
+
+Here, FO optimizes base frequencies by ML whereas GTR+F (default) counts base frequencies directly from the alignment.
+
+While this sounds overwhelming there are some tools you can use to estimate what the best model for your data is and we will discuss this a bit later in the practical session.
+
+Other things to consider are:
+
+- Rate heterogenities
+- Protein mixture models
+
+#### Rate heterogenity:  
+
+In more traditional phylogenetic models, all genes are assumed to evolve at the same rate. However, genes evolve at very different rates and it is important to account for this rate heterogeneity.
+
+Some examples:
+
+- Nucleotide substitution rates vary for different positions in the sequence, i.e. the third position in codons often mutates faster. 
+- Additionally, the genetic code is degenerate (i.e. redundant) and transitions are less likely to change amino acids.
+- Rates of mutation can vary among sites because of selective pressures associated with structural and functional constraints
+
+So how can we account for rate heterogeneity?
+
+- We need to model rate distributions over sites
+- i.e. we can use gamma distributions in which we assume that the rate at each site is a random variable drawn from a statistical distribution (i.e. a gamma distribution)
+
+Some options to account for this in IQ-TREE are:
+
+```{r fig19, echo=FALSE, fig.cap="", out.width = '60%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_19.png")
+```
+
+
+
+#### Protein mixture models
+
+Standard protein substitution models use a single amino acid replacement matrix but site evolution is highly heterogenous. I.e. depending on their position and role in the proteins shape and structure, sites will accept only a very set of amino acids, while selecting against other, unfavored, amino acids. Therefore, a single relpacement matrix is often not enough to represent all the complexity of evolutionary processes. To overcome this we can combine several amino acid replacement matrices to better fit protein evolution.
+
+Options in IQ-TREE are:
+
+```{r fig20, echo=FALSE, fig.cap="", out.width = '60%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_20.png")
+```
+
+Complex models usually generate a tree that will better fit the data, i.e. the tree will have a higher likelihood. But a more complex model will have more free parameters to estimate and thus might have a greater error (i.e. variance). Therefore, the simplest model that is good enough to model your data is the best model.
+
+## Choosing the best models
+
+What model we choose depends on our data but we have to keep in mind that we can generate erroneous trees if our model is too simple to describe our data. However, if we chose models with to many parameters (i.e our model is too complex) then we can also get a tree with a wrong topology. 
+
+There are other tools, but for our purpose, let's see how we can determine the best model using IQ-TREE:
+
+- with the standard model selection (-m TEST option) or the new ModelFinder (-m MFP) option.
+- these models automatically select the best-fit model for our phylogenetic analyses 
+- NOTE: to test the more complex C10-C60 models, these need to be specified individually
+
+
+## Confidence: Can I trust my trees?
+
+Various methods allow to assess the confidence in branching patterns or branch supports.
+
+Methods that are implemented in IQ-TREE:
+
+- bootstrapping
+- ultrafast bootstrap approximation
+- SH-like approximate likelihood tests
+
+For Bayesian trees, i.e. PhyloBayes, we can use:
+
+- posterior predictive (PP) tests
+
+Below we see an example that explains the rationale behind bootstrapping, one of the most commonly used approaches.
+
+```{r fig21, echo=FALSE, fig.cap="", out.width = '80%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_21.png")
+```
+
+
+###################################################################################
+###################################################################################
+# 2. Practical part
+###################################################################################
+###################################################################################
+
+The general workflows for phylogenetic analyses (generally) is as follows:
+
+1. Identify your marker genes/proteins
+2. Align marker genes
+3. Trim alignments
+4. When working with more than one gene/protein **AND** when these have the same evolutionary history: concatenate alignents
+5. Run phylogenetic analyses
+6. Visualize results
+
+In this tutorial we will go through all these steps.
+
+For this workflows it is generally recommended to put files for different parts of the workflow into different subfolders. Here, our structure will look as follows:
+
+```{r fig22, echo=FALSE, fig.cap="", out.width = '60%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_22.png")
+```
+
+## Preparing your working directory
+
+**General info on this tutorial**
+
+- `r text_spec("red box.", background = "#BEBEBE", color = "black", bold = F)` : The code that we want to execute
+- `r text_spec("red box.", background = "#D05A6E", color = "white", bold = T)` : Additional code that is useful but code that we WILL NOT use during this tutorial
+- `r text_spec("Code", background = "white", color = "black", bold = F)` : In some cases the code might be hidden and you only see a little box at the right hand side. Hidden codes means that from the previous sessions you should have enough knowledge to do this step or it is is a test of your skills. If you run into issues you can open the code and check how to run your command by clicking on the `Code` button to reveal the code
+- `r text_spec("hyperlink", background = "white", color = "red", bold = F)` : If the text is highlighted like this during a text section, then you can click on it and a hyperlink gives you more info (either the publication or an online tutorial)
+- **Exercise:** : This will appear if you should have the required background to finish all the steps yourself. If you run into trouble, you can find the answers if you click the Code button
+- **Questions:** : This will appear if there are some questions for you do check if you understood everything but this is not required to finish the tutorial. Some of these are more time-consuming and might be best to run on your own after you have finished the complete workflow.
+
+
+**Getting started**
+
+Let's first start with how to get to your files. For this to work:
+
+- go to the directory you want to work with the files and make a new directory named `Phylogeny_tutorial` 
+- into this folder make a a symlink for the two folders containing the data we need: `0_Scripts_and_needed_files` and `1_Protein_Seqs` from `/export/lv3/scratch/workshop_2021/S9_Phylogenetics`. 
+
+
+**Questions:**
+
+- Check what files you have in each of the two new directories.
+- Look into arCOG00779.faa, what do the sequence names look like?
+- How many sequences do we have in each fasta file?
+
+```{bash class.source = 'fold-hide', eval=FALSE}
+#change your working director (cd = change directory)
+cd /export/lv3/scratch/workshop_2021/Users/<UserName>
+
+#make a folder for the Phylogeny_tutorial and go into it
+mkdir Phylogeny_tutorial
+cd Phylogeny_tutorial
+
+#make a symlink for the relevant data
+ln -s /export/lv3/scratch/workshop_2021/S9_Phylogenetics/0_Scripts_and_needed_files/ .
+ln -s /export/lv3/scratch/workshop_2021/S9_Phylogenetics/1_Protein_Seqs/ .
+
+#Qst 1: list all files in your directory and subdirectories (using ls, the list command, the * is a wildcard and lists everything)
+ll *
+
+#if we want to check how our file looks we can view the first 10 lines with head
+#Qst 2: we can see that we have a very short sequence header, in this case it is just the genome id
+head 1_Protein_Seqs/arCOG00779.faa
+
+#check how many sequneces we have in an indiv. file
+grep -c ">" 1_Protein_Seqs/arCOG00779.faa
+
+#check how many sequneces we have across all files file
+grep -c ">" 1_Protein_Seqs/*.faa
+```
+
+
+## Identify your marker genes/proteins
+
+If we have a set of genomes we are interested, we often first need to identify phylogenetic markers in that genomes. There are several options how you can do this and we will cover them in the Annotation tutorial later/
+
+`r text_spec("Since identifying genes/proteins usually takes a bit longer, you can find an example on how you can run a search but we will not actually run during this tutorial.", background = "#D05A6E", color = "white", bold = T)`
+
+```{bash class.source = 'fold-show', eval=F}
+hmmsearch Genomes.faa ArCOGProfiles.hmm -E 1e-5 > Output.txt
+```
+
+Here, we have a file with our genome protein sequences and a database of hmm profiles that among others include the arCOG IDs we are interested in. More on hidden hmm profiles can be found [here](https://www.ebi.ac.uk/training/online/courses/pfam-creating-protein-families/what-are-profile-hidden-markov-models-hmms/). The arCOGs are a set of hmms specifically designed for archaea, there are many more databases, some of them we will cover in the Annotation workflow.
+
+
+## Naming files and what are we actually working with?
+
+For a lot of workflows it is very important how your genomes, protein sequences are named. Here, we talk about: how long is the name, are there extra symbols, is it informative. Especially if you have a large number of files, or very large files, it is extremely helpful to have a consistent naming scheme.
+
+Some very general hints for naming files:
+
+- Have a useful header that describes what is inside your file. I.e. for a protein fasta header, you might not only include the protein ID but also the genome ID
+- Be short, concise and do not use extra symbols (try to avoid using spaces, ideally use mainly `-` , or `_`)
+- If you want to concatentate files (which is important for phylogenetic analyses), your fasta files need to have a common part in the sequence header. I.e. your genome ID (i.e. B21_G17 in our files) should be part of the sequence header.
+
+In our example we have a very simple header, for each protein sequence we just have the genome ID. This is over-simplified for the sake of this tutorial, more commonly you will also have the proteinID in the fasta header. The reason we removed this beforehand is that we later want to concatenate the sequences and for this to work, we need a common name. If you work with your own files this is something to keep in mind.
+
+The three proteins we are working with during this tutorial are:
+
+- arCOG00779: Ribosomal protein L15, average length of 150 amino acids
+- arCOG01762: DNA-directed RNA polymerase subunit B, average length of 850 amino acids
+- arCOG04050: 5'-3' exonuclease, average length of 450 amino acids
+
+If we would look at the sequences with a sequence viewer we would see something like this:
+
+```{r fig23, echo=FALSE, fig.cap="", out.width = '60%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_23.png")
+```
+
+How the files were generated:
+- We had 40 archaeal genomes, all belonging to the same phylum in the DPANN archaea
+- in these 40 genomes, we searched for sequences that reflect marker genes we commonly use for phylogenetic analyses
+- for this tutorial we work with 3 of these commonly used markers
+
+You can look at the sequence yourself with:
+
+```{bash class.source = 'fold-show', eval=F}
+seaview 1_Protein_Seqs/arCOG00779.faa
+```
+
+We can see that the sequence looks very messy and unorganized, so the first thing we have to do is to align our sequences
+
+## Align sequences
+
+There are different tools to do this, our go-to tool generally is [mafft](https://mafft.cbrc.jp/alignment/software/)
+
+Depending on how many sequences we have, we can run this in two ways:
+
+1. Run this and repeat gene for gene:
+
+```{bash class.source = 'fold-show', eval=F}
+mafft-linsi --reorder --thread 2  1_Protein_seqs/arCOG00779.faa > arCOG00779.aln
+```
+
+2. If we want to run all three files at once we can run a loop
+
+**Advanced exercise**: 
+
+- Run all 3 sequences using a loop.
+- If you want to develop a nice workflow, you might also want to consider to put the alignments into a separate folder, i.e. a ``2_Mafft`` folder.
+
+```{bash class.source = 'fold-hide', eval=F}
+#first we create a list for our three files we want to loop through
+#general recommendation: if you make a file list like this, do not include the full path but remove it with sed, as this might mess things up
+ls 1_Protein_Seqs/*faa | sed 's/1_Protein_Seqs\///g' | sed 's/\.faa//g' > FileList
+
+#prep folder
+mkdir 2_Mafft
+
+#then we can use the FileList to build our loop
+for i in `cat FileList`; do mafft-linsi --reorder --thread 2 1_Protein_Seqs/${i}.faa > 2_Mafft/${i}.aln; done
+```
+
+
+`r text_spec("Beware: \n If you have less than 1000 sequences we STRONGLY recommend that you run mafft_linsi for your main analyses as it is much more accurate. For more sequences, this becomes too time consuming and you could just use mafft", background = "#D05A6E", color = "white", bold = T)`
+
+Info on the options used in the command above:
+
+- mafft is our tool we use for aligning sequences
+- linsi: iterative refinement method incorporating local pairwise alignment. This works best for (in our experience) up to 1000 sequences. With more sequences, you should check the website for how to best run the aln in your case.
+- --reorder is an option that reorders our sequences based on how similar they are
+- --thread defines with how many cpus we run our analysis
+- ``>`` redirects the output of a command to a file
+
+
+**Exercise**
+
+- Look at the files using seaview, do you see any issues.
+
+Answer: Our files should look something like this using seaview:
+
+```{r fig24, echo=FALSE, fig.cap="", out.width = '80%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_24.png")
+```
+
+Looking at the highlighted areas we can already see that there are some potentially problematic regions:
+
+- the ends usually do not look too good because they are more difficult to align
+- often we have a few sequences with insertions
+
+Due to these issues it often makes sense to trim the alignment.
+
+## Trimming
+
+Run BMGE for each of our three proteins like this. View the files again with seaview to check if something changed.
+
+```{bash class.source = 'fold-show', eval=F}
+java -jar /opt/biolinux/BMGE-1.12/BMGE.jar -i arCOG00779.aln -t AA -g 0.2 -m BLOSUM30 -h 0.55 -of arCOG00779_trimmed.aln
+```
+
+The options here are:
+
+- -t the input file, which contains our trimmed sequence alignment
+- -g maximum gap rate (range 1-0; 0.2 default)
+- -m BLOSUM matrix to use (default 62)
+- -h Maximum entropy threshold (range 1-0; default 0.5)
+- -of the name of the output file and output format
+
+**Advanced exercise**: 
+
+- Run all 3 sequences using a loop.
+- Consider putting the trimmed alignment into a separate folder that you name `3_BMGE`
+
+```{bash class.source = 'fold-hide', eval=F}
+#prepare folder
+mkdir 3_BMGE
+
+#trim
+for i in `cat FileList`; do java -jar /opt/biolinux/BMGE-1.12/BMGE.jar -i 2_Mafft/${i}.aln -t AA -g 0.2 -m BLOSUM30 -h 0.55 -of 3_BMGE/${i}_trimmed.aln; done
+```
+
+When this runs we should see something like this:
+
+```{r fig25, echo=FALSE, fig.cap="", out.width = '40%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_25.png")
+```
+
+Here, bmge reports how long the sequences initially were and how many characters were removed.
+
+If we check our alignment after trimming, we expect to see something like this:
+
+```{r fig26, echo=FALSE, fig.cap="", out.width = '60%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_26.png")
+```
+
+The higlighted areas are the regions we before labelled as "problematic". We can see that they have been removed.
+
+Depending on your settings, i.e. having a very short protein, BMGE sometimes can be very stringent. Here, you can always play with the settings and control the gap penalties, for more information see the [paper](https://bmcecolevol.biomedcentral.com/articles/10.1186/1471-2148-10-210) and [here](http://gensoft.pasteur.fr/docs/BMGE/1.12/BMGE_doc.pdf)
+
+Another alternative you might want to check is [Trimal](http://trimal.cgenomics.org)
+
+
+## Generate a phylogenetic tree
+
+As discussed above there are several tools to use. We will work with IQ-tree, which as some good documentation here:
+
+ http://www.iqtree.org/doc/
+ http://www.iqtree.org/doc/iqtree-doc.pdf 
+
+As well as slides from an IQ-TREE workshop:
+
+ http://www.iqtree.org/workshop/ 
+ 
+** Depending on your job and the capacity of the server/computer using:**
+
+- check what resources you have available as some trees need to have ~20 CPUs to run well. 
+- You do not want to clog the system and stop other users from running their job
+
+For this to work we first have to load the module for IQ-tree on ada to be able to use this tool:
+
+```{bash class.source = 'fold-show', eval=F}
+#check avail modules on ada
+module avail
+
+#load module we need
+module load iqtree/2.1.1
+```
+ 
+### Examples for running iqtree with model selection
+
+`r text_spec("These are just some examples (and need some time to run). So you can test them on your own as an exercise after the workshop", background = "#D05A6E", color = "white", bold = T)` 
+
+The basic command to run an alignment and test for different models is:
+
+```{bash class.source = 'fold-show', eval=F}
+#Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
+iqtree -s alignment.aln -m MF
+```
+
+This will test all models known to iqtree, if you want to speed this up you can choose a certain set of models.
+
+```{bash class.source = 'fold-show', eval=F}
+#Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
+iqtree -s alignment.aln -m MF -mset WAG,LG,JTT
+```
+
+By default, substitution models are not included in these tests. If we want to test them we have to add them. Generally, it is recommended to include them in the test and the following selection would be quite comprehensive for testing models.
+
+```{bash class.source = 'fold-show', eval=F}
+#Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
+iqtree2 -s alignment.aln -m MF -madd LG+C10,LG+C20,LG+C30,LG+C40,LG+C50,LG+C60,LG+C10+R+F,LG+C20+R+F,LG+C30+R+F,LG+C40+R+F,LG+C50+R+F,LG+C60+R+F --score-diff all
+```
+
+Used options:
+
+- m MF               Extended model selection (not followed by tree inference)
+- mset WAG,LG,JTT    Comma-separated model list in case we want to not test all models
+- madd                List of mixture models to consider, **these are not automatically added in the search** since that would take a lot of time
+
+### Run a tree on our protein files
+
+For now, lets try to test one of our simpler models, which has the benefit that it runs quicker.
+
+```{bash class.source = 'fold-show', eval=F}
+iqtree2 -s arCOG00779_trimmed.aln -m JTT -nt 4 -bb 1000 -pre arCOG00779_JTT
+```
+
+The options are:
+
+- -s Input alignment that can be provided in PHYLIP/FASTA/NEXUS/CLUSTAL/MSF format
+- -m model to use (here: JTT, notice: We just run JTT because it is relatively fast but generally it is not a model you would use since it is relatively simple)
+- -nt number of threads (4 CPUS here, we can also use AUTO to determine best fit, which is recommended for larger trees)
+- -bb Ultrafast bootraping (using 1000 replicates)
+- -pre Prefix for all outputfiles (useful if we need to rerun trees to i.e. test different models)   
+
+**Advanced exercise**
+
+- run this in a loop
+- store the files in a folder named `4_treefiles`
+
+```{bash class.source = 'fold-hide', eval=F}
+#prepare folder
+mkdir 4_treefiles
+
+#run iqtree
+for i in `cat FileList`; do iqtree -s 3_BMGE/${i}_trimmed.aln -m JTT -nt 4 -bb 1000 -pre 4_treefiles/${i}_JTT; done
+```
+
+IQ-tree will provide you with several output files:
+
+- .iqtree: Full result of the run, this is the main report file
+- .log:  Run log
+- ..contree:  Consensus tree with assigned branch supports where branch lengths are optimized on the original alignment; printed if Ultrafast Bootstrap is selected
+- .ckp.gz: Checkpoint file; useful if a job was stopped because of RAM/CPU limits
+- .mldist: file with maximum likelihood distances 
+- .splits.nex: support values in percentage for all splits (bipartitions), computed as the occurence frequencies in the bootstrap trees. This file is in NEXUS format, which can be viewed with the program SplitsTree to explore the conflicting signals in the data.
+- .uniqueseq.phy : among a group of identical sequences, IQ-TREE will keep the first two and ignore the rest and this file contains this "reduced" sequence set
+- ..treefile:  Maximum likelihood tree in NEWICK format --> **we usually work with this one**
+
+**Exercise/Homework**
+
+`r text_spec("The exercises below will take a bit longer to run, so if you are interested you can try this as homework:", background = "#D05A6E", color = "white", bold = T)`
+
+The exercises below will take a bit longer to run, so if you are interested you can try this as homework:
+
+1. Run a LG tree
+2. Run a LG+C10+F+R tree, do you notice a difference in time?
+3. run a model test with and without the C-series, does it make a difference for the shorter or longer proteins?
+
+```{bash class.source = 'fold-hide', eval=F}
+#run iqtree with different settings
+for i in `cat FileList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG -nt 4 -bb 1000 -pre 4_treefiles/${i}_LG; done
+
+for i in `cat FileList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG+C10+F+R -nt 4 -bb 1000 -pre 4_treefiles/${i}_LGC10FR; done
+
+#do a model test for the short protein and compare the standard models and also include the C-series
+mkdir 5_modeltest
+
+iqtree2 -s 3_BMGE/arCOG00779_trimmed.aln -m MF -pre 5_modeltest/arCOG00779_model_test_MFonly 
+
+iqtree2 -s 3_BMGE/arCOG00779_trimmed.aln -m MF -madd LG+C10,LG+C20,LG+C30,LG+C40,LG+C50,LG+C60,LG+C10+R+F,LG+C20+R+F,LG+C30+R+F,LG+C40+R+F,LG+C50+R+F,LG+C60+R+F --score-diff all -pre 5_modeltest/arCOG00779_model_test_all
+
+#do a model test for the longest protein and compare the standard models and also include the C-series
+iqtree2 -s 3_BMGE/arCOG01762_trimmed.aln -m MF -pre 5_modeltest/arCOG01762_model_test_MFonly 
+
+iqtree2 -s 3_BMGE/arCOG01762_trimmed.aln -m MF -madd LG+C10,LG+C20,LG+C30,LG+C40,LG+C50,LG+C60,LG+C10+R+F,LG+C20+R+F,LG+C30+R+F,LG+C40+R+F,LG+C50+R+F,LG+C60+R+F --score-diff all -pre 5_modeltest/arCOG01762_model_test_all
+```
+
+
+Notice: 
+
+- the more complex the model, the more cpus you would need. Setting ``-nt auto`` automatically chooses the best amount of CPUs. When using this make sure what your system allows and do not overlad it. Since this will take a bit if time to compute, do this only if you have extra time or after the workshop
+- Since we have very simple trees, i.e all genomes belong to the same phylum, so we might not see many differences between the models. But generally, the more complex your data, the better it is to have an appropriate model
+- using mixture models with short alignments,  i.e. only ~200 columns is tricky and this usually has not enough information to reliably estimate model parameters, so this is more useful to run on concatenated alignments. We can already see this if we compare the shortest with the longest protein in our data.
+
+
+### What do tree files look like?
+
+There are two general outputfiles for phylogenetic treefiles.
+
+1. Newick files 
+
+A newick tree would look like this (unrooted):
+
+```{r class.source = 'fold-show', eval=F}
+(rhizobia:20, (pseudomonas:30, alteromonas:22):7, (shewanella:33, vibrio:12):40);
+```
+
+
+```{r fig27b, echo=FALSE, fig.cap="", out.width = '35%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_27b.png")
+```
+
+Or like this if it would be rooted:
+
+```{r class.source = 'fold-show', eval=F}
+(rhizobia:20, (pseudomonas:30, alteromonas:22):7):20
+```
+
+
+```{r fig27c, echo=FALSE, fig.cap="", out.width = '35%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_27c.png")
+```
+
+
+**You can see in the example above, that a the syntax of newick files uses brackets, colons and dots. Therefore, it is recommended to avoid these symbols for your genome names/in your fasta headers.**
+
+2. Nexus files
+
+Nexus files look slightly different and generally look like this: 
+
+```{r class.source = 'fold-show', eval=F}
+ #NEXUS
+ Begin data;
+ Dimensions ntax=4 nchar=15;
+ Format datatype=dna missing=? gap=-;
+ Matrix
+ Species1   {{DNA sequence|atgctagctagctcg}}
+ Species2   {{DNA sequence|atgcta??tag-tag}}
+ Species3   {{DNA sequence|atgttagctag-tgg}}
+ Species4   {{DNA sequence|atgttagctag-tag}}           
+ ;
+ End;
+```
+
+What file format is generated depends a bit on the tool you use but there are scripts that can be found online to convert between the two file formats. For now we will work with newick files.
+
+
+**Exercise**
+
+- Open one of the treefiles generated by iqtree and find out what file format we have
+
+
+### Renaming files
+
+When opening our tree file, we see that the genome have a rather non-informative header. Often, having an easy and short header makes scripts easier to run but is not useful if we want to visualize the tree. However, if we provide a mapping file, we can replace the names with something more useful.
+
+A mapping file should consist of two columns that are tab-separated. The first column should be the name exactly as it appears in our tree file, the second column has the name we want to replace it with. I.e. like this
+
+```{r fig29, echo=FALSE, fig.cap="", out.width = '80%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_29.png")
+```
+
+The mapping file is provided in the first folder as well as the script we will use to search and then replace our names as follows:
+
+```{bash class.source = 'fold-show', eval=F}
+perl 0_Scripts_and_needed_files/Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace arCOG00779_JTT.treefile > arCOG00779_JTT.treefile_renamed
+```
+
+And here again test to run a loop:
+
+```{bash class.source = 'fold-hide', eval=F}
+for i in 4_treefiles/*treefile; do perl 0_Scripts_and_needed_files//Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace ${i} > ${i}_renamed; done
+```
+
+## Visualizing tree files
+
+There are several tools for this. One example is the web-based tool iTOL but for this example we have a look at the software figtree, which is free to use.
+
+To open our file in figtree we can use either the GUI interface or type
+
+```{bash class.source = 'fold-show', eval=F}
+figtree arCOG00779_JTT.treefile_renamed
+```
+
+To view everything relevant for you:
+
+- Read in the boostrap values by going to the extending the left hand side panel for branch lables --> select display and here select the label
+- Root the tree by extending the Trees panel and selecting Root tree (uses midpoint rooting). If we know an outgroup we can manually root
+- Order our tree, i.e. beautify b extending the trees panel and ordering the nodes.
+
+Additionally, with larger trees we can:
+
+- Change the color by: File --> Annotations --> load Annotations.txt an example how such a file would look like can be found in 0_Scripts_and_needed_files)
+
+
+Then we should see something like this
+
+```{r fig30, echo=FALSE, fig.cap="", out.width = '80%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_30.png")
+```
+
+With Annotations.txt we could for example color the different phyla different and thus very quickly can see, whether our tree looks ok or not (i.e. do all members of the same phylum cluster together or are there signs of horizontal gene transfer).
+
+## Concatenating multiple proteins
+
+If we want to run species trees it is recommended to concatenate several genes/proteins since this way we can increase the amount of information have and thus better resolve deeper branches.
+
+If you want to do this, the following requirements need to be fullfilled:
+
+- The sequences must have the same name
+- The sequences must have the same length (this is why we will concatenate after the alignment and trimming step)
+- This approach is only suitable if your marker gene occurs only 1x in your genome (beware of paralogs and contaminations)
+- Your proteins have the same evol. history, i.e. for ribosomal proteins
+
+In theory if we would concatenate two proteins, we would do something like this:
+
+```{r fig31, echo=FALSE, fig.cap="", out.width = '100%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_31.png")
+```
+
+For this to work you often have to clean up the fasta header, i.e. 
+
+often the header now looks like this: `GCA_002494525-GCA_002494525_04800` = it has the genome and the protein ID
+and to be able to concatenate your sequences its better if the header looks like this: `GCA_002494525`
+
+For this tutorial, the fasta header was already prepared for you. In "real life" you might need to do this. 
+Below you see an example code , how you can use the cut command to shorten fasta headers using the cut command
+
+```{bash class.source = 'fold-show', eval=F}
+#shorten header
+for sample in `cat FileList`; do cut -f1 -d "_" 1_Protein_Seqs/${sample}* > 1_Protein_Seqs/${sample}_clean.faa  ; done
+```
+
+For this tutorial, we do not need to do antyhing but can immediately concatenate two (or more) sequences using a script like:
+
+```{bash class.source = 'fold-show', eval=F}
+perl 0_Scripts_and_needed_files/catfasta2phyml.pl -f -c 3_BMGE/*.aln > 3_BMGE/Concat_seqs.aln
+```
+
+This will give you an output that will tell you in what order the sequences were combined and were exactly they are positioned:
+
+```{r fig32, echo=FALSE, fig.cap="", out.width = '40%', fig.align="left"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_32.png")
+```
+
+Then we can run the tree and rename the tree as we have done before
+
+```{bash class.source = 'fold-show', eval=F}
+#run tree
+iqtree2 -s 3_BMGE/Concat_seqs.aln -m JTT -nt 2 -bb 1000 -pre 4_treefiles/Concat_JTT
+
+#using a better model
+iqtree2 -s 3_BMGE/Concat_seqs.aln -m LG+C10+F+R -nt 4 -bb 1000 -pre 4_treefiles/Concat_LC_C10FR
+
+#clean up genome names
+perl 0_Scripts_and_needed_files/Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace 4_treefiles/Concat_JTT.treefile > 4_treefiles/Concat_JTT.treefile_renamed
+
+```
+
+**Exercise**
+
+Have a look at the tree and compare it with the other trees you have seen it before.
+
+
+```{r fig33, echo=FALSE, fig.cap="", out.width = '100%', fig.align="center"}
+knitr::include_graphics("/Users/ninadombrowski/Desktop/WorkingDir/Notebooks/Pictures/Phylogeny_33.png")
+```
+
+Since we have a tree with genomes all belonging to the same phylum the tree will look very similar. However, we can see, highlighted with the red circle, that even using a sequence alignment with 1000 amino acids (remember 16S just has ~ 1500 nucleotides) some genomes are not well resolved. You can improve this by using better models or having a longer alignment. Currently, there are different marker sets that are used that include at least 14 and up to several hundred proteins.
+
+
+# Selecting marker genes to generated a species tree
+
+You can run trees for every gene you are interested in but for species trees there are some things to watch out for:
+
+- ideally you want to concatenate several genes with a similar history. More sequence information will help to resolve your tree better.
+- If you want to concatenate markers they should show only limited numbers of horizontal gene transfers
+- If you work with archaea and bacteria, those should be monophyletic in single gene trees. If they are not, the marker is not good for a species tree.
+
+
+## Commonly used marker sets:
+
+- ribosomal marker sets, i.e. the 14 RP dataset  (ribosomal proteins L2, L3, L4, L5, L6, L14, L16, L18, L22, L24, S3, S8, S10, S17 and S19) used in Hug LA, Thomas BC, Sharon I et al. Critical biogeochemical functions in the subsurface are associated with bacteria from new phyla and little studied lineages. Environ Microbiol 2016;18:159–73.
+- 48 marker protein sets from: Zaremba-Niedzwiedzka K, Caceres EF, Saw JH et al. Asgard archaea illuminate the origin of eukaryotic cellular complexity. Nature 2017;541:353–8. A List can be found [here](https://static-content.springer.com/esm/art%3A10.1038%2Fnature21031/MediaObjects/41586_2017_BFnature21031_MOESM413_ESM.pdf) (SI Table 12 and 13)
+- GTDB marker sets for archaea and bacteria that can be found [here](https://data.gtdb.ecogenomic.org/releases/latest/auxillary_files/)
+
+
+## Personal thoughts on what marker set to use
+
+As a general note we have to say that normally no marker set is perfect and especially for new taxa (esp. on higher levels, i.e. phylum rank) it might make sense to manually check single protein trees for issues, such as HGT. In our own work (Dombrowski N, Williams TA, Sun J et al. Undinarchaeota illuminate DPANN phylogeny and the impact of gene transfer on archaeal evolution. Nature Communications 2020;11:3939) we noticed that some commonly used marker sets can be problematic and we found markers:
+
+- were archaea and bacteria are not monophyletic
+- that have signs of a lot of HGT
+
+These effects mean that the genes do not have a common history, which can generate issues when running phylogenetic trees. Therefore, esp. if you want to describe novel lineages, it often can be useful to:
+
+- manually check single marker protein trees
+- discard markers were monophyly is violated or that show signs of gene transfers
+- generated a concatenated alignment only of "good" markers
+
+For a start, we can however, recommend using the 14 RP marker set or the Zaremba marker sets that have been manually checked more extensively in previous work.
