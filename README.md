@@ -1,5 +1,8 @@
 # Phylogeny_tutorial
 
+[![DOI](https://zenodo.org/badge/309676571.svg)](https://zenodo.org/badge/latestdoi/309676571)
+
+
 ## `Description`
 
 The HTML version of this tutorial can be found [here](https://ndombrowski.github.io/Phylogeny_tutorial/)
