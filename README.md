@@ -26,4 +26,4 @@ The tutorial works on the NIOZ server named ada, where most tools are installed.
 
 The script catfasta2phyml.pl comes from: https://github.com/nylander/catfasta2phyml so please use this link for citing this script.
 
-Additionally, if you found this tutorial useful and use it in your work, feel free to add a link to this repository to your methods section.
+Additionally, if you found this tutorial useful and use it in your work and you reuse some of the code feel free to link to this repository to your methods section.
