@@ -1,5 +1,5 @@
 #hidden files
-*.*
+.*
 !.gitignore
 
 # History files

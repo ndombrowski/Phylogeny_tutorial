@@ -13,7 +13,7 @@ This tutorial is the written-up version by a lecture given by Dr. Anja Spang and
 
 The goal of this tutorial is to learn how to run a phylogeny using single as well as concatenated marker genes.
 
-We have three proteins that are found in ~300 archaeal genomes and we want to create a phylogenetic tree for all three single proteins as well as generate a concatenated proteint tree.
+We have three proteins that are found in ~30 archaeal genomes and we want to create a phylogenetic tree for all three single proteins as well as generate a concatenated proteint tree.
 
 This notebook will consist of two parts:
 
