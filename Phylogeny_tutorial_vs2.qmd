@@ -351,12 +351,12 @@ Below we see an example that explains the rationale behind bootstrapping, one of
 
 # 2. Practical part
 
-The general workflows for phylogenetic analyses (generally) is as follows:
+The baisc workflows for phylogenetic analyses normally follow these steps:
 
 1. Identify your marker genes/proteins
 2. Align marker genes
 3. Trim alignments
-4. When working with more than one gene/protein **AND** when these have the same evolutionary history: concatenate alignents
+4. When working with more than one gene/protein **AND** when these have the same evolutionary history: concatenate alignments
 5. Run phylogenetic analyses
 6. Visualize results
 
@@ -374,8 +374,9 @@ For this workflows it is generally recommended to put files for different parts 
 Let's first start with how to get to your files. For this to work:
 
 - Go to the directory you want to work with the files and make a new directory named `Phylogeny_tutorial` 
-- Into this folder make a a symlink for the two folders containing the data we need: `0_Scripts_and_needed_files` and `1_Protein_Seqs` from `/export/lv3/scratch/workshop_2021/S9_Phylogenetics`. 
+- Into this folder make a a symbolic link to the two folders containing the data we need: `0_Scripts_and_needed_files` and `1_Protein_Seqs` from `/export/lv3/scratch/bioinformatics_workshop/S13_Phylogeny`. 
 
+For people following the tutorial on their own, both folders are also part of the github repository and can be found in the folder [Input_files](https://github.com/ndombrowski/Phylogeny_tutorial).
 
 ```{bash}
 #set variable for the base directory and personal user directory
@@ -383,7 +384,7 @@ user_name="ndombrowski"
 base_dir="/export/lv3/scratch/bioinformatics_workshop/Users/"
 
 #set variable to the folder with the data
-download_dir="/export/lv3/scratch/bioinformatics_workshop/SXX_Phylogeny"
+download_dir="/export/lv3/scratch/bioinformatics_workshop/S13_Phylogeny"
 
 #go to working directory
 wdir=${base_dir}/${user_name}
@@ -401,7 +402,7 @@ ln -s ${download_dir}/1_Protein_Seqs/ .
 
 **Questions:**
 
-- Check what files you have in each of the two new directories.
+- Check what files you have in each of the two new directories. Specifically, answer with how many files we work based on what you see in the `1_Protein_Seqs` folder
 - Look into a sequence file that is found in the folder `1_Protein_Seqs` named arCOG00779.faa, what do the sequence names look like?
 - How many sequences do we have in each fasta file?
 
@@ -413,8 +414,10 @@ ln -s ${download_dir}/1_Protein_Seqs/ .
 ll 0_Scripts_and_needed_files/*
 ll 1_Protein_Seqs/*
 
-#if we want to check how our file looks we can view the first 10 lines with head
-#Qst 2: we can see that we have a very short sequence header, in this case it is just the genome id
+#Qst2: if we want to check how our file looks we can view the first 10 lines with head
+#We can see that we have a very short sequence header, in this case it is just the genome id
+#This is not very descriptive and usually too short, i.e. we would want at least a protein ID in there
+#but for our purposes this is a good format as it allows us to combine the sequences later
 head 1_Protein_Seqs/arCOG00779.faa
 
 #Qst3: check how many sequences we have in an individual file
@@ -429,35 +432,45 @@ grep -c ">" 1_Protein_Seqs/*.faa
 
 ## Identify your marker genes/proteins
 
-If we have a set of genomes we are interested, we often first need to identify phylogenetic markers in that genomes. There are several options how you can do this and we cover this in more detail in our [Annotation tutorial]().
+If we have a set of genomes we are interested, we often first need to identify phylogenetic markers in these genomes. There are several options how you can do this and we cover this in more detail in our [Annotation tutorial](https://ndombrowski.github.io/Annotation_workflow/).
 
 :::{.callout-warning}
-Since identifying genes/proteins usually takes a bit longer, you can find an example on how you can do this but we will not actually run during this tutorial.
+Since identifying genes/proteins usually takes a bit longer, below you can find an example on how you can do this but we will not actually run this code during this tutorial.
 
-Below `All_Arcogs_2018.hmm` is a database we also use in our Annotation tutorial and this database of cluster of orthologous groups is especially useful if you work with archaeal genomes. For bacterial genomes `NCBI_COGs_Oct2020.hmm` might be more suitable and we recommend some studies and useful marker proteins for your own research at the end of this tutorial. 
+Below `All_Arcogs_2018.hmm` is a database we also use in our Annotation tutorial and this database of clusters of orthologous groups is especially useful if you work with archaeal genomes. For bacterial genomes `NCBI_COGs_Oct2020.hmm` might be more suitable and we recommend some studies and useful marker proteins for your own research at the end of this tutorial. 
 :::
+
+
+Briefly, we extracted marker proteins from our genomes of interest as follows:
+
+- We work with 40 archaeal genomes, all belonging to the same phylum in the DPANN archaea
+- We identified proteins in these genomes using Prokka
+- Then we concantenated the proteins from all 40 genomes into a single file that we named `Genomes.faa`
+- In these 40 genomes, we searched for sequences that reflect marker genes we commonly use for phylogenetic analyses using a hmmsearch (see below)
+
 
 ```{bash class.source = 'fold-show', eval=F}
 #identify arcogs in our genomes of interest
 hmmsearch --tblout arcogs/sequence_results.txt --domtblout arcogs/domain_results.txt All_Arcogs_2018.hmm Genomes.faa > Output.txt
 
-#format the full table and only select sequences above a certain e-value
+#format the full table (i.e. remove unnecessary lines) 
+#and only select sequences above a certain e-value
 sed 's/ \+ /\t/g' arcogs/sequence_results.txt | sed '/^#/d'| sed 's/ /\t/g'| awk -F'\t' -v OFS='\t' '{print $1, $3, $6, $5}' | awk -F'\t' -v OFS='\t' '($4 + 0) <= 1E-3'  > arcogs/sequence_results_red_e_cutoff.txt
 
-#get best hit based on bit score, and then evalue (in case two sequences have the same bitscore)
+#get best hit for each protein based on bit score, and then evalue (in case two sequences have the same bitscore)
 sort -t$'\t' -k3,3gr -k4,4g arcogs/sequence_results_red_e_cutoff.txt | sort -t$'\t' --stable -u -k1,1  | sort -t$'\t' -k3,3gr -k4,4g >  arcogs/sequence_results_red_e_cutoff_uniq.txt
 
-#if we want to extract the markers we could do this as follows:
+#if we want to extract the proteins for our phylogenetic markers we could do this as follows:
 grep "arCOG00779" arcogs/sequence_results_red_e_cutoff_uniq.txt > MarkerLists/single_markers/arCOG00779.txt
 
 #if we have a lot of markers we are looking for, we can store these in list and use a for loop:
 for sample in `cat  Markers_of_interest.txt; do grep "$sample" arcogs/sequence_results_red_e_cutoff_uniq.txt > MarkerLists/single_markers/${sample}.txt; done
 
-#extract the proteinID (check that this ID is indeed in column1!)
+#extract the proteinID from our hmmer results(check that this ID is indeed in column1!) 
 for sample in `cat Markers_of_interest.txt`; do awk -F'\t' -v OFS='\t' '{print $1 }' MarkerLists/split/$sample* > MarkerLists/protein_list_non_dedup/$sample |LC_ALL=C  sort ; done
 
-#extract faa sequences
-mkdir -p Marker_Genes
+#extract faa sequences based on the proteinID we extracted
+mkdir Marker_Genes
 
 for sample in `cat  Markers_of_interest.txt`; do perl 0_Scripts_and_needed_files/screen_list_new.pl MarkerLists/protein_list_non_dedup/$sample Genomes.faa keep > Marker_Genes/${sample}.faa; done
 
@@ -465,12 +478,12 @@ for sample in `cat  Markers_of_interest.txt`; do perl 0_Scripts_and_needed_files
 
 In the code above, we have a file with all our genome protein sequences and a database of hmm profiles that among others include the arCOG IDs we are interested in. More on hidden hmm profiles can be found [here](https://www.ebi.ac.uk/training/online/courses/pfam-creating-protein-families/what-are-profile-hidden-markov-models-hmms/). 
 
-The arCOGs are a set of hmms specifically designed for archaea, there are many more databases, some of them we will cover in the Annotation workflow.
+
 
 
 ## Naming files and what are we actually working with?
 
-For a lot of workflows it is very important how your genomes, protein sequences are named. Here, we talk about: how long is the name, are there extra symbols, is it informative. Especially if you have a large number of files, or very large files, it is extremely helpful to have a consistent naming scheme.
+For a lot of workflows it is very important how your genomes and especially your protein sequences are named. For example, you should ask yourself: how long is the name, are there extra symbols, is it informative, etc. Especially if you have a large number of files, or very large files, it is extremely helpful to have a consistent naming scheme.
 
 Some very general hints for naming files:
 
@@ -478,7 +491,7 @@ Some very general hints for naming files:
 - Be short, concise and do not use extra symbols (try to avoid using spaces, ideally use mainly `-` , or `_`)
 - If you want to concatenate files (which is important for phylogenetic analyses), your fasta files need to have a common part in the sequence header. I.e. your genome ID (i.e. B21_G17 in our files) should be part of the sequence header.
 
-In our example we have a very simple header, for each protein sequence we just have the genome ID. This is over-simplified for the sake of this tutorial, more commonly you will also have the proteinID in the fasta header. The reason we removed this beforehand is that we later want to concatenate the sequences and for this to work, we need a common name. If you work with your own files this is something to keep in mind.
+In our example we have a very simple header, for each protein sequence we just have the genome ID. This is over-simplified for the sake of this tutorial, more commonly you will also have the proteinID in the fasta header. The reason we removed this beforehand, using the `cut` command, is that we later want to concatenate the sequences and for this to work, we need a common name. If you work with your own files this is something to keep in mind.
 
 The three proteins we are working with during this tutorial are:
 
@@ -486,17 +499,9 @@ The three proteins we are working with during this tutorial are:
 - arCOG01762: DNA-directed RNA polymerase subunit B, average length of 850 amino acids
 - arCOG04050: 5'-3' exonuclease, average length of 450 amino acids
 
-If we would look at the sequences with a sequence viewer we would see something like this:
+If we would look at the sequences of one of these protein faa files with a sequence viewer we would see something like this:
 
 ![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_23.png){width=100% fig-align="center"}
-
-How the files were generated:
-
-- We had 40 archaeal genomes, all belonging to the same phylum in the DPANN archaea
-- We identified proteins in these genomes using Prokka
-- Then we concantenated the proteins from all 40 genomes into a single file
-- In these 40 genomes, we searched for sequences that reflect marker genes we commonly use for phylogenetic analyses using a hmmsearch
-- For this tutorial we work with 3 of these commonly used markers
 
 You can look at the sequence yourself with:
 
@@ -511,7 +516,7 @@ We can see that the sequence looks very messy and unorganized, so the first thin
 
 There are different tools to align sequences, our recommended tool is [MAFFT](https://mafft.cbrc.jp/alignment/software/)
 
-Depending on how many sequences we have, we can run this in two ways:
+Depending on how many sequences we have, we can run this in two ways: step by step or more efficiently in a for loop (or using GNU parallel).
 
 1. Run MAFFT individually for each gene:
 
@@ -529,21 +534,33 @@ mkdir 2_Mafft
 mafft-linsi --reorder --thread 2  1_Protein_seqs/arCOG00779.faa > 2_Mafft/arCOG00779.aln
 mafft-linsi --reorder --thread 2  1_Protein_seqs/arCOG01762.faa > 2_Mafft/arCOG01762.aln
 mafft-linsi --reorder --thread 2  1_Protein_seqs/arCOG04050.faa > 2_Mafft/arCOG04050.aln
-
 ```
 
 2. Run MAFFT for each file using one command (for example using a for-loop):
 
 **Advanced exercise**: 
 
-- Run all 3 sequences using a loop.
-- If you want to develop a nice workflow, you might also want to consider to put the alignments into a separate folder, i.e. a ``2_Mafft`` folder.
+- Run all 3 sequences using a loop or using GNU parallel.
+
 
 <details>
     <summary>Click me to see an answer</summary>
 
 ```{bash class.source = 'fold-hide', eval=F}
+#create a list for the markers we work with
+ls 1_Protein_Seqs/*faa | sed 's/1_Protein_Seqs\///g' | sed 's/\.faa//g' > MarkerList
+
+#count if the numbers of markers stored in the list is correct: 3
+wc -l  MarkerList
+
+#prep folder
+mkdir 2_Mafft
+
+#using a for-loop
 for i in `cat MarkerList`; do mafft-linsi --reorder --thread 2 1_Protein_Seqs/${i}.faa > 2_Mafft/${i}.aln; done
+
+#using gnu parallel
+parallel -j3 'i={};mafft-linsi --reorder --thread 2 1_Protein_Seqs/${i}.faa > 2_Mafft/${i}.aln' ::: `cat MarkerList`
 ```
 
 </details>
@@ -560,11 +577,13 @@ Info on the options used in the command above:
 - `--reorder` is an option that reorders our sequences based on how similar they are
 - `--thread` defines with how many CPUs we run our analysis
 - ``>`` redirects the output of a command to a file
+- In the GNU parallel command:
+  - `-j3` defines how many jobs we run in parallel, here: 3
 
 
 **Exercise**
 
-- Look at the files using seaview. Does anything look weird to you?
+- Look at the files using seaview. How do they look compared to when we looked at the unaligned sequences?
 
 <details>
     <summary>Click me to see an answer</summary>
@@ -578,7 +597,7 @@ Looking at the highlighted areas we can already see that there are some potentia
 - The ends usually do not look too good because they are more difficult to align
 - Often we have a few sequences with insertions
 
-Due to these issues it often makes sense to trim the alignment.
+Due to these issues it often makes sense to trim the alignment, i.e. remove problematic positions in the alignment.
 
 </details>
 
@@ -589,7 +608,7 @@ Due to these issues it often makes sense to trim the alignment.
 
 Same as for the trimming, there are different tools you can use, such as [trimAL](http://trimal.cgenomics.org/trimal) or [BMGE](https://bio.tools/bmge). Generally, BMGE is more conservative than trimAL.
 
-For this tutorial, ww will run BMGE for each of our three proteins like this:
+For this tutorial, we will run BMGE for each of our three proteins using a for loop, but as you have seen above, we can also use GNU parallel to speed things up even more:
 
 ```{bash class.source = 'fold-show', eval=F}
 #prepare folder
@@ -602,9 +621,9 @@ for i in `cat MarkerList`; do java -jar /opt/biolinux/BMGE-1.12/BMGE.jar -i 2_Ma
 The options here are:
 
 - `-t` the input file, which contains our trimmed sequence alignment
-- `-g` maximum gap rate (range 1-0; 0.2 default)
-- `-m` BLOSUM matrix to use (default 62)
-- `-h` Maximum entropy threshold (range 1-0; default 0.5)
+- `-g` the maximum gap rate (range 1-0; 0.2 is used by default) = the proportion of gap characters (i.e., dashes or other characters indicating gaps) allowed at each position in the alignment. Setting a lower value for -g will result in a more stringent trimming of the alignment, as fewer gaps will be allowed at each position. 
+- `-m`  Which BLOSUM (BLOcks SUbstitution Matrix) matrix we use for aligning and trimming the alignment (default 62). BLOSUM matrices are a family of matrices that are commonly used in sequence alignment to quantify the similarity between two amino acid sequences. They are based on the observation that certain pairs of amino acids occur together more frequently than others in evolutionarily related proteins. The BLOSUM matrices are named according to the percentage of identity between sequences used to generate them. For example, BLOSUM62 is based on a set of sequences that are at least 62% identical to each other. If you are working with highly divergent sequences, you may want to use a more permissive matrix, such as BLOSUM30 or BLOSUM45.On the other hand, if you are working with very closely related sequences, you may want to use a more restrictive matrix, such as BLOSUM80 or BLOSUM90.
+- `-h` The maximum entropy threshold  that is used to identify blocks of conserved positions in the alignment (range 1-0; default 0.5). Entropy is a measure of the amount of variation or diversity at a given position in the alignment. Positions with high entropy contain a mixture of different amino acids, while positions with low entropy are more conserved and contain fewer different amino acids.
 - `-of` the name of the output file and output format
 
 BMGE will print to the screen how much shorter the alignment got after the trimming: For example, in the alignment for arCOG00779 we initially had 203 characters, which were reduced to 137 characters after trimming:
@@ -615,17 +634,16 @@ If we check our alignment with seaview after trimming, we should see something l
 
 ![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_26.png){width=100% fig-align="center"}
 
-
 The highlighted areas are the regions we before labelled as "problematic". We can see that they have been removed.
 
 Depending on your settings and the type of proteins analysed, i.e. when we have a very short protein, BMGE sometimes can be very stringent. Here, you can always play with the settings and control the gap penalties, for more information see the [paper](https://bmcecolevol.biomedcentral.com/articles/10.1186/1471-2148-10-210) and [here](http://gensoft.pasteur.fr/docs/BMGE/1.12/BMGE_doc.pdf)
 
-Another alternative you might want to check is [Trimal](http://trimal.cgenomics.org)
+Another alternative you might want to check is [Trimal](http://trimal.cgenomics.org).
 
 
 ## Generate a phylogenetic tree
 
-As discussed above there are several tools to use. We will work with IQ-tree, which as some good documentation here:
+As discussed above there are several tools to use. We will work with IQ-TREE, which as some good documentation that can be found here:
 
  http://www.iqtree.org/doc/
  http://www.iqtree.org/doc/iqtree-doc.pdf 
@@ -634,13 +652,13 @@ As well as slides from an IQ-TREE workshop:
 
  http://www.iqtree.org/workshop/ 
  
-** Depending on your job and the capacity of the server/computer using:**
+**Running phylogenies can be memory intensive, so depending on your job and the capacity of the server/computer you are using:**
 
-- check what resources you have available as some trees need to have ~20 CPUs to run well. 
+- Check what resources you have available as some trees need to have >20 CPUs to run well. 
 - Additionally, the longer the alignment and the more sequences you have, the more memory will be needed. Before starting the run, IQ-TREE will print to the screen (and the log file how much memory a job is expected to take and you can estimate the memory settings accordingly). I.e. you will see something like: `NOTE: 2 MB RAM (0 GB) is required!` 
-- You do not want to clog the system and stop other users from running their job
+- You do not want to clog the system and stop other users from running their job, so be mindful of these things when submitting a job to ada or laplace.
 
-For this to work we first have to load the module for IQ-tree on ada to be able to use this tool:
+To run phylogenies on the NIOZ servers we first have to load the module for IQ-tree on ada (and laplace) to be able to use IQ-TREE:
 
 ```{bash class.source = 'fold-show', eval=F}
 #check avail modules on ada
@@ -653,24 +671,24 @@ module load iqtree/2.1.1
 ### Examples for running iqtree with model selection
 
 :::{.callout-warning}
-These are just some examples (and need some time to run). So you can test them on your own as an exercise after the workshop and we will NOT run them now.
+These are just some examples (and need some time to run). So you can test them on your own as an exercise after the workshop and we will NOT run them now. If you run them on your own, you can run them individually, in a for-loop or with GNU parallel.
 :::
 
 The basic command to run an alignment and test for different models is:
 
 ```{bash class.source = 'fold-show', eval=F}
-#Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
-iqtree -s alignment.aln -m MF
+#Run an extended model selection that additionally includes the FreeRate model
+iqtree2 -s alignment.aln -m MF  -pre outputfolder/alignment
 ```
 
-This will test all models known to iqtree, if you want to speed this up you can choose a certain set of models.
+The command above will test all models known to by IQ-TREE, if you want to speed this up you can choose a certain set of models instead of testing all models.
 
 ```{bash class.source = 'fold-show', eval=F}
-#Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
-iqtree -s alignment.aln -m MF -mset WAG,LG,JTT
+#Run an extended model selection on the WAG, LG and JTT model that additionally includes FreeRate models
+iqtree2 -s alignment.aln -m MF -mset WAG,LG,JTT
 ```
 
-By default, substitution models are not included in these tests. If we want to test them we have to add them. Generally, it is recommended to include them in the test and the following selection would be quite comprehensive for testing models.
+This is important: By default, substitution models are not included in these tests. If we want to test them we have to add them to the list of models we want to test. Generally, it is recommended to include them in the test and the following selection would be quite comprehensive for testing models.
 
 ```{bash class.source = 'fold-show', eval=F}
 #Run an extended model selection that additionally includes FreeRate model and  run tree with the best model found
@@ -680,41 +698,72 @@ iqtree2 -s alignment.aln -m MF -madd LG+C10,LG+C20,LG+C30,LG+C40,LG+C50,LG+C60,L
 Used options:
 
 - `-m MF`              Extended model selection (not followed by tree inference)
+- `-m MFP`              Extended model selection followed by a tree interference
 - `-mset WAG,LG,JTT`    Comma-separated model list in case we want to not test all models
-- `-madd`                List of mixture models to consider, **these are not automatically added in the search** since that would take a lot of time
+- `-madd`                List of mixture models to consider
+- `-pre` Prefix for all outputfiles (useful if we need to rerun trees to i.e. test different models)   
+
+
+**Exercise**
+
+Run a model test using the WAG, LG, JTT models on the trimmed alignment for arCOG04050
+
+<details>
+    <summary>Click me to look at the code</summary>
+
+```{bash class.source = 'fold-show', eval=F}
+mkdir -p 4_treefiles/model_test
+
+#Run an extended model selection on the WAG, LG and JTT model that additionally includes FreeRate models
+iqtree2 -s 3_BMGE/arCOG04050_trimmed.aln -m MF -mset WAG,LG,JTT -pre 4_treefiles/model_test/arCOG04050_model_test
+```
+
+When we check what gets printed to the screen, we see that IQ-TREE compares 71 different models and it looks for the best model using different Criteria (we won't go into the specifics here) but we generally recommend using the Bayesian Information Criterion. The best model chosen can be found in the line `Best-fit model: LG+I+G4 chosen according to BIC`. The results are also stored in `4_treefiles/model_test/arCOG04050_model_test.log`
+
+Regardless of the criterion, the best model is the one with the lowest AIC or BIC score.
+
+</details>
+
 
 
 
 ### Run a tree on our protein files
 
-For now, lets try to test one of our simpler models, which has the benefit that it runs quicker.
+We have seen, that for arCOG00779 the best model to use is LG+I+G4 (at least when not testing for mixture models).
+
+However, for now, lets try to generate a phylogentic tree using one of our simpler models, which has the benefit that it runs quicker.
 
 ```{bash class.source = 'fold-show', eval=F}
-#prepare folder
-mkdir 4_treefiles
-
-#run iqtree
-for i in `cat MarkerList`; do iqtree -s 3_BMGE/${i}_trimmed.aln -m JTT -nt 4 -bb 1000 -pre 4_treefiles/${i}_JTT; done
+#run iqtree on all our three alignments
+for i in `cat MarkerList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m JTT -nt 4 -B 1000 -pre 4_treefiles/${i}_JTT; done
 ```
 
 The options are:
 
 - `-s` Input alignment that can be provided in PHYLIP/FASTA/NEXUS/CLUSTAL/MSF format
-- `-m` model to use (here: JTT, notice: We just run JTT because it is relatively fast but generally it is not a model you would use since it is relatively simple)
+- `-m` model to use (here: JTT, notice: We just run JTT because it is relatively fast but generally it is not a model you would use since it is too simple)
 - `-nt` number of threads (4 CPUS here, we can also use AUTO to determine best fit, which is recommended for larger trees)
-- `-bb` Ultrafast bootstrapping (using 1000 replicates)
-- `-pre` Prefix for all outputfiles (useful if we need to rerun trees to i.e. test different models)   
+- `-B` Ultrafast bootstrapping (using 1000 replicates)
 
 IQ-tree will provide you with several output files. In our case, these files will start with the marker name followed by the model and have the following file extensions:
 
-- .iqtree: Full result of the run, this is the main report file
+- `.iqtree`: Full results of the run, this is the main report file that records what was run when (among other things)
 - .log:  The log file that records how we ran the command and everything that gets printed to the screen
-- .contree:  Consensus tree with assigned branch supports where branch lengths are optimized on the original alignment; printed if Ultrafast Bootstrap is selected
-- .ckp.gz: Checkpoint file; useful if a job was stopped because of RAM/CPU limits
-- .mldist: file with maximum likelihood distances 
-- .splits.nex: support values in percentage for all splits (bipartitions), computed as the occurence frequencies in the bootstrap trees. This file is in NEXUS format, which can be viewed with the program SplitsTree to explore the conflicting signals in the data.
-- .uniqueseq.phy : among a group of identical sequences, IQ-TREE will keep the first two and ignore the rest and this file contains this "reduced" sequence set
-- .treefile:  Maximum likelihood tree in NEWICK format --> **we usually work with this one**
+- `.contree`:  Consensus tree with assigned branch supports where branch lengths are optimized on the original alignment; printed if Ultrafast Bootstrap is selected
+- `.ckp.gz`: Checkpoint file; useful if a job was stopped because of RAM/CPU limits because it allows us to pick up the run from the last checkpoint
+- `.mldist`: file with maximum likelihood distances 
+- `.splits.nex`: support values in percentage for all splits (bipartitions), computed as the occurence frequencies in the bootstrap trees. This file is in NEXUS format, which can be viewed with the program SplitsTree to explore the conflicting signals in the data.
+- `.uniqueseq.phy`: among a group of identical sequences, IQ-TREE will keep the first two and ignore the rest and this file contains this "reduced" sequence set
+- `.treefile`:  Maximum likelihood tree in NEWICK format --> **we usually work with this one**
+
+
+Some more general comments: 
+
+- The more complex the model, the more CPUs you would need. Setting ``-nt auto`` automatically chooses the best amount of CPUs. When using this make sure that you can use the maximum number of CPUs and do not overload it. Since this will take a bit if time to compute, do this only if you have extra time or after the workshop
+- Since we have very simple trees, i.e all genomes belong to the same phylum, we might not see many differences between the models. But generally, the more complex your data, the better it is to have an appropriate model
+- Using mixture models with short alignments,  i.e. only ~200 columns, is tricky and this usually has not enough information to reliably estimate model parameters, so it is more useful to run mixture models on concatenated alignments. 
+
+
 
 **Exercise/Homework**
 
@@ -722,18 +771,18 @@ IQ-tree will provide you with several output files. In our case, these files wil
 The exercises below will take a bit longer to run, so if you are interested you can try this as homework:
 :::
 
-1. Run a LG tree
-2. Run a LG+C10+F+R tree, do you notice a difference in run time?
-3. Run a model test with and without the C-series, does it make a difference for the shorter or longer proteins?
+1. Run a LG tree for all 3 alignments 
+2. Run a LG+C10+F+R tree for all 3 alignments, do you notice a difference in run time?
+3. Run a model test with and without the C-series, does it make a difference for the shorter or longer proteins in how long the analysis takes?
 
 <details>
     <summary>Click me to see an answer</summary>
 
 ```{bash class.source = 'fold-hide', eval=F}
 #run iqtree with different settings
-for i in `cat MarkerList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG -nt 4 -bb 1000 -pre 4_treefiles/${i}_LG; done
+for i in `cat MarkerList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG -nt 4 -B 1000 -pre 4_treefiles/${i}_LG; done
 
-for i in `cat MarkerList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG+C10+F+R -nt 4 -bb 1000 -pre 4_treefiles/${i}_LGC10FR; done
+for i in `cat MarkerList`; do iqtree2 -s 3_BMGE/${i}_trimmed.aln -m LG+C10+F+R -nt 4 -B 1000 -pre 4_treefiles/${i}_LGC10FR; done
 
 #prepare a folder to store our results in
 mkdir 5_modeltest
@@ -753,12 +802,6 @@ iqtree2 -s 3_BMGE/arCOG01762_trimmed.aln -m MF -madd LG+C10,LG+C20,LG+C30,LG+C40
 
 </details>
 
-
-Notice: 
-
-- the more complex the model, the more CPUs you would need. Setting ``-nt auto`` automatically chooses the best amount of CPUs. When using this make sure what your system allows and do not overload it. Since this will take a bit if time to compute, do this only if you have extra time or after the workshop
-- Since we have very simple trees, i.e all genomes belong to the same phylum, so we might not see many differences between the models. But generally, the more complex your data, the better it is to have an appropriate model
-- Using mixture models with short alignments,  i.e. only ~200 columns is tricky and this usually has not enough information to reliably estimate model parameters, so this is more useful to run on concatenated alignments. We can already see this if we compare the shortest with the longest protein in our data.
 
 
 
@@ -836,30 +879,30 @@ A mapping file should consist of two columns that are tab-separated. The first c
 The mapping file is provided in the first folder as well as the script we will use to search and then replace our names as follows:
 
 ```{bash class.source = 'fold-show', eval=F}
-perl 0_Scripts_and_needed_files/Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace arCOG00779_JTT.treefile > arCOG00779_JTT.treefile_renamed
-```
-
-And here again test to run a loop:
-
-```{bash class.source = 'fold-hide', eval=F}
 for i in 4_treefiles/*treefile; do perl 0_Scripts_and_needed_files//Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace ${i} > ${i}_renamed; done
+
+#compare the output before and after
+head 4_treefiles/arCOG04050_JTT.treefile
+head 4_treefiles/arCOG04050_JTT.treefile_renamed
 ```
+
+
 
 ## Visualizing tree files
 
-There are several tools for this. One example is the web-based tool iTOL but for this example we have a look at the software Figtree, which is free to use.
+There are several tools for this. One example is the web-based tool iTOL but for this example we have a look at the software Figtree, which is free to use, and ready to use on ada.
 
 To open our file in Figtree we can use either the GUI interface or type
 
 ```{bash class.source = 'fold-show', eval=F}
-figtree arCOG00779_JTT.treefile_renamed
+figtree 4_treefiles/arCOG00779_JTT.treefile_renamed
 ```
 
 To view everything relevant for you:
 
-- Read in the bootstrap values by going to the extending the left hand side panel for branch labels --> select display and here select the label
-- Root the tree by extending the Trees panel and selecting Root tree (uses midpoint rooting). If we know an outgroup we can manually root
-- Order our tree, i.e. beautify b extending the trees panel and ordering the nodes.
+- Add the bootstrap values by going to the left hand side panel and extend the branch labels section. In there select display and here select the label,
+- Root the tree by extending the Trees panel and selecting Root tree (uses midpoint rooting). If we know an outgroup we can manually root using an outgroup as well
+- Order our tree, i.e. beautify the tree by extending the trees panel and ordering the nodes.
 
 Additionally, with larger trees we can:
 
@@ -867,37 +910,34 @@ Additionally, with larger trees we can:
 
 Now we should see something like this:
 
-![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_30.png){width=100% fig-align="center"}
+![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_30b.png){width=100% fig-align="center"}
 
 With Annotations.txt we could for example color the different phyla different and thus very quickly can see, whether our tree looks ok or not (i.e. do all members of the same phylum cluster together or are there signs of horizontal gene transfer).
 
 
 ## Concatenating multiple proteins
 
-If we want to run species trees it is recommended to concatenate several genes/proteins since this way we can increase the amount of information have and thus better resolve deeper branches.
+If we want to run species trees it is recommended to concatenate several genes/proteins since this way we can increase the amount of information we have and thus better resolve deeper branches.
 
 If you want to do this, the following requirements need to be fulfilled:
 
-- The sequences must have the same name
+- The fasta headers of our sequences must have the same name
 - The sequences must have the same length (this is why we will concatenate after the alignment and trimming step)
-- This approach is only suitable if your marker gene occurs only 1x in your genome (beware of paralogs and contaminations)
-- Your proteins have the same evolutionary history, i.e. for ribosomal proteins
+- This approach is only suitable if your marker gene occurs only 1x in your genome (beware of paralogs and contaminations). If you a marker occurs more than once in your genome there are different ways around this. One way is to run a single gene tree and select the sequence that is most likely the true sequence and falls where you expect it to fall. Alternatively, you can keep the best hit. However, this is not recommended because you can not decided based on an e-value what sequences most likely is a contamination. We also have a script to help with this step and will integrate it at a later point in the tutorial.
+- Your proteins have the same evolutionary history, as is the case for example for ribosomal proteins
 
-In theory if we would concatenate two proteins, we would do something like this:
+In theory if we would concatenate two proteins, we are doing something like this:
 
 ![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_31.png){width=100% fig-align="center"}
 
 
-For this to work you often have to clean up the fasta header, i.e. 
+For this to work you often have to clean up the sequence header, i.e. often the header might look like this: `GCA_002494525-GCA_002494525_04800` = it has the genome and the protein ID and to be able to concatenate your sequences the header should look like this: `GCA_002494525`
 
-often the header now looks like this: `GCA_002494525-GCA_002494525_04800` = it has the genome and the protein ID
-and to be able to concatenate your sequences its better if the header looks like this: `GCA_002494525`
-
-For this tutorial, the fasta header was already prepared for you. If you run this workflow by yourself, you would have to do this, so let's briefly discuss how this is done. Below you see an example code , how you can use the cut command to shorten fasta headers using the `cut` command: 
+For this tutorial, the fasta header was already prepared for you. If you run this workflow by yourself, you would have to do this, so let's briefly discuss how you could do this. Below you see an example code , how you can use the cut command to shorten fasta headers using the `cut` command: 
 
 ```{bash class.source = 'fold-show', eval=F}
 #shorten header
-for sample in `cat MarkerList`; do cut -f1 -d "_" 1_Protein_Seqs/${sample}* > 1_Protein_Seqs/${sample}_clean.faa  ; done
+#for sample in `cat MarkerList`; do cut -f1 -d "-" 1_Protein_Seqs/${sample}* > 1_Protein_Seqs/${sample}_clean.faa  ; done
 ```
 
 As we said, for this tutorial, we do not need to do anything and can immediately concatenate two (or more) sequences using a script as shown below:
@@ -908,44 +948,52 @@ perl 0_Scripts_and_needed_files/catfasta2phyml.pl -f -c 3_BMGE/*.aln > 3_BMGE/Co
 
 This will give you an output that will tell you in what order the sequences were combined and were exactly they are positioned:
 
-![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_32.png){width=100% fig-align="center"}
+![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_32.png){width=60% fig-align="center"}
 
-Then we can run the tree and rename the tree as we have done before
+Then we can run the tree on the concatenated alignment and rename the tree as we have done before:
 
 ```{bash class.source = 'fold-show', eval=F}
 #run tree
-iqtree2 -s 3_BMGE/Concat_seqs.aln -m JTT -nt 2 -bb 1000 -pre 4_treefiles/Concat_JTT
+iqtree2 -s 3_BMGE/Concat_seqs.aln -m JTT -nt 2 -B 1000 -pre 4_treefiles/Concat_JTT
 
-#using a better model
-iqtree2 -s 3_BMGE/Concat_seqs.aln -m LG+C10+F+R -nt 4 -bb 1000 -pre 4_treefiles/Concat_LC_C10FR
+#using a better model (this runs for 15-20 min, so best run this after the workshop)
+#iqtree2 -s 3_BMGE/Concat_seqs.aln -m LG+C10+F+R -nt 4 -B 1000 -pre 4_treefiles/Concat_LC_C10FR
 
 #clean up genome names
 perl 0_Scripts_and_needed_files/Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace 4_treefiles/Concat_JTT.treefile > 4_treefiles/Concat_JTT.treefile_renamed
+
+#perl 0_Scripts_and_needed_files/Replace_tree_names.pl 0_Scripts_and_needed_files/names_to_replace 4_treefiles/Concat_LC_C10FR.treefile > 4_treefiles/Concat_LC_C10FR.treefile_renamed
 
 ```
 
 **Exercise**
 
-Have a look at the tree and compare it with the other trees you have seen it before.
+Have a look at the tree and compare it with the other trees based on single marker genes that you have looked at before.
 
 ![](C:/Users/ndmic/WorkingDir/Notebooks/Pictures/Phylogeny_33.png){width=100% fig-align="center"}
 
-Since we have a tree with genomes all belonging to the same phylum the tree will look very similar. However, we can see, highlighted with the red circle, that even using a sequence alignment with 1000 amino acids (remember 16S just has ~ 1500 nucleotides) some genomes are not well resolved. You can improve this by using better models or having a longer alignment. Currently, there are different marker sets that are used that include at least 14 and up to several hundred proteins.
+Since we have a tree with genomes all belonging to the same phylum the trees will look very similar but if we look closely we see that several taxa are not in their place, i.e. especially if we compare single gene trees with the concatenated gene tree.
+
+We can also see, highlighted with the red circle, that even using a sequence alignment with 1000 amino acids (remember 16S just has ~ 1500 nucleotides) some genomes are not well resolved. 
+
+Finally, in the example above you see some sequences on very long branches, for example NIOZ134_mx_b281_2, which also can create artefacts in trees. This can be due to a lot of markers missing in this genome, contamination or that this is a fast evolving lineage.
+
+Generally, you can improve phylogenetic trees by using better models as well as having a longer alignment. Currently, there are different marker sets that are used that include at least 14 and up to several hundred proteins.
 
 
 # Selecting marker genes to generated a species tree
 
 You can run trees for every gene you are interested in but for species trees there are some things to watch out for:
 
-- ideally you want to concatenate several genes with a similar history. More sequence information will help to resolve your tree better.
+- Ideally you want to concatenate several genes with a similar history. More sequence information will help to resolve your tree better.
 - If you want to concatenate markers they should show only limited numbers of horizontal gene transfers
 - If you work with archaea and bacteria, those should be monophyletic in single gene trees. If they are not, the marker is not good for a species tree.
 
 
 ## Commonly used marker sets:
 
-- ribosomal marker sets, i.e. the 14 RP dataset  (ribosomal proteins L2, L3, L4, L5, L6, L14, L16, L18, L22, L24, S3, S8, S10, S17 and S19) used in Hug LA, Thomas BC, Sharon I et al. Critical biogeochemical functions in the subsurface are associated with bacteria from new phyla and little studied lineages. Environ Microbiol 2016;18:159–73.
-- 48 marker protein sets from: Zaremba-Niedzwiedzka K, Caceres EF, Saw JH et al. Asgard archaea illuminate the origin of eukaryotic cellular complexity. Nature 2017;541:353–8. A List can be found [here](https://static-content.springer.com/esm/art%3A10.1038%2Fnature21031/MediaObjects/41586_2017_BFnature21031_MOESM413_ESM.pdf) (SI Table 12 and 13)
+- Ribosomal marker sets, i.e. the 14 RP dataset  (ribosomal proteins L2, L3, L4, L5, L6, L14, L16, L18, L22, L24, S3, S8, S10, S17 and S19) used in [Hug et al 2016](https://www.nature.com/articles/nmicrobiol201648).
+- 48 marker protein set described by [Zaremba-Niedzwiedzka et al. 2017](https://www.nature.com/articles/nature21031)
 - GTDB marker sets for archaea and bacteria that can be found [here](https://data.gtdb.ecogenomic.org/releases/latest/auxillary_files/)
 
 
@@ -953,13 +1001,14 @@ You can run trees for every gene you are interested in but for species trees the
 
 As a general note we have to say that normally no marker set is perfect and especially for new taxa (esp. on higher levels, i.e. phylum rank) it might make sense to manually check single protein trees for issues, such as HGT. In our own work (Dombrowski N, Williams TA, Sun J et al. Undinarchaeota illuminate DPANN phylogeny and the impact of gene transfer on archaeal evolution. Nature Communications 2020;11:3939) we noticed that some commonly used marker sets can be problematic and we found markers:
 
-- were archaea and bacteria are not monophyletic
-- that have signs of a lot of HGT
+- Were archaea and bacteria are not monophyletic
+- That have signs of a lot of HGT
 
-These effects mean that the genes do not have a common history, which can generate issues when running phylogenetic trees. Therefore, esp. if you want to describe novel lineages, it often can be useful to:
+These effects mean that the genes do not have a common history, which can generate issues when running phylogenetic trees. Therefore, especially if you want to describe novel lineages, it often can be useful to:
 
-- manually check single marker protein trees
-- discard markers were monophyly is violated or that show signs of gene transfers
-- generated a concatenated alignment only of "good" markers
+- Manually check single marker protein trees
+- Discard markers were monophyly is violated or that show signs of gene transfers
+- Generated a concatenated alignment only of "good" markers
 
 For a start, we can however, recommend using the 14 RP marker set or the Zaremba marker sets that have been manually checked more extensively in previous work.
+
