@@ -351,7 +351,7 @@ Below we see an example that explains the rationale behind bootstrapping, one of
 
 # 2. Practical part
 
-The baisc workflows for phylogenetic analyses normally follow these steps:
+The basic workflows for phylogenetic analyses normally follow these steps:
 
 1. Identify your marker genes/proteins
 2. Align marker genes
@@ -446,7 +446,8 @@ Briefly, we extracted marker proteins from our genomes of interest as follows:
 - We work with 40 archaeal genomes, all belonging to the same phylum in the DPANN archaea
 - We identified proteins in these genomes using Prokka
 - Then we concantenated the proteins from all 40 genomes into a single file that we named `Genomes.faa`
-- In these 40 genomes, we searched for sequences that reflect marker genes we commonly use for phylogenetic analyses using a hmmsearch (see below)
+- In these 40 genomes, we searched for sequences that reflect marker genes we commonly use for phylogenetic analyses using a hmmsearch (see below). Specifically, since we work with archaeal genomes we annotate proteins in our genomes using the  archaeal Clusters of Orthologous Genes (arCOGs). 
+- Next, we extract proteins assigned to commonly used marker proteins, for example ribosomal proteins, and generate one fasta file for each marker of interest.  
 
 
 ```{bash class.source = 'fold-show', eval=F}
@@ -478,6 +479,22 @@ for sample in `cat  Markers_of_interest.txt`; do perl 0_Scripts_and_needed_files
 
 In the code above, we have a file with all our genome protein sequences and a database of hmm profiles that among others include the arCOG IDs we are interested in. More on hidden hmm profiles can be found [here](https://www.ebi.ac.uk/training/online/courses/pfam-creating-protein-families/what-are-profile-hidden-markov-models-hmms/). 
 
+:::{.callout-note}
+
+**A word on single-copy marker genes**
+
+Using this approach you might not end up with single-copy marker genes. For example, we might find that ribosomal protein 3 (rps3) occurs 2x in the genome of *Nanoarchaeum equitans* (Ne) despite ribosomal proteins usually only occurring as single-copy. This second copy can be explained by multiple things: It could be a contamination, a wrongly annotate protein or a true duplication.
+
+When you use the code above we would extract not a single copy of rps3 but two copies for Ne. When running a phylogeny using single gene trees that is not an issue and we can even use the phylogenetic tree to help us investigate if the second copy is indeed a contamination, a wrongly annotated protein or a true duplication event. However, for concatenated phylogenies (more on this a bit later) this becomes problematic as we can only concatenate sequences from different markers if they occur 1x per genome.
+
+If you a marker occurs more than once in your genome and you want to concatenate sequences there are different ways around this: 
+
+1. One way is to run a single gene tree and select the sequence that is most likely the true sequence and falls where you expect it to fall (this is the recommended approach but can be time-consuming if you work with many taxa). 
+2. Alternatively, you can keep the best hit based on scores such as the e-value by filtering the hmmsearch results further with awk or python. However, this approach is not recommended because you can not decided based on an e-value what of the two sequences is the best to keep. 
+3. We also have a script that decides what proteins to use by comparing sequence identities and will integrate it at a later point in the tutorial.
+
+For this tutorial, this will not be a problem, as we cleaned the sequences for you beforehand.
+:::
 
 
 
@@ -761,7 +778,7 @@ Some more general comments:
 
 - The more complex the model, the more CPUs you would need. Setting ``-nt auto`` automatically chooses the best amount of CPUs. When using this make sure that you can use the maximum number of CPUs and do not overload it. Since this will take a bit if time to compute, do this only if you have extra time or after the workshop
 - Since we have very simple trees, i.e all genomes belong to the same phylum, we might not see many differences between the models. But generally, the more complex your data, the better it is to have an appropriate model
-- Using mixture models with short alignments,  i.e. only ~200 columns, is tricky and this usually has not enough information to reliably estimate model parameters, so it is more useful to run mixture models on concatenated alignments. 
+- Using mixture models with short alignments, i.e. only ~200 columns, is tricky and this usually has not enough information to reliably estimate model parameters, so it is more useful to run mixture models on concatenated alignments. 
 
 
 
